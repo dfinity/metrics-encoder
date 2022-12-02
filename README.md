@@ -1,2 +1,2 @@
 # metrics-encoder
-Metrics encoder for Prometheus metrics
+A library for encoding metrics in Prometheus text exposition format.
