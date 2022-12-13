@@ -7,8 +7,8 @@ mod tests;
 /// [labels](https://prometheus.io/docs/practices/naming/#labels).
 /// See [MetricsEncoder::counter_vec] and [MetricsEncoder::gauge_vec].
 pub struct LabeledMetricsBuilder<'a, W>
-where
-    W: io::Write,
+    where
+        W: io::Write,
 {
     encoder: &'a mut MetricsEncoder<W>,
     name: &'a str,
@@ -73,7 +73,7 @@ impl<W: io::Write> MetricsEncoder<W> {
     pub fn encode_histogram(
         &mut self,
         name: &str,
-        buckets: impl Iterator<Item = (f64, f64)>,
+        buckets: impl Iterator<Item=(f64, f64)>,
         sum: f64,
         help: &str,
     ) -> io::Result<()> {
@@ -235,8 +235,8 @@ fn validate_prometheus_name(name: &str) {
     let bytes = name.as_bytes();
     if (!bytes[0].is_ascii_alphabetic() && bytes[0] != b'_')
         || !bytes[1..]
-            .iter()
-            .all(|c| c.is_ascii_alphanumeric() || *c == b'_')
+        .iter()
+        .all(|c| c.is_ascii_alphanumeric() || *c == b'_')
     {
         panic!(
             "Name '{}' does not match pattern [a-zA-Z_][a-zA-Z0-9_]",
