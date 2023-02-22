@@ -1,4 +1,5 @@
 use std::io;
+use std::iter::once;
 
 #[cfg(test)]
 mod tests;
@@ -29,6 +30,107 @@ impl<W: io::Write> LabeledMetricsBuilder<'_, W> {
     }
 }
 
+/// A helper for encoding histograms that use
+/// [labels](https://prometheus.io/docs/practices/naming/#labels).
+/// See [MetricsEncoder::histogram_vec].
+pub struct LabeledHistogramBuilder<'a, W>
+where
+    W: io::Write,
+{
+    encoder: &'a mut MetricsEncoder<W>,
+    name: &'a str,
+}
+
+impl<W: io::Write> LabeledHistogramBuilder<'_, W> {
+    /// Encodes the metrics histogram observed for the given values of labels.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if one of the labels does not match pattern
+    /// [a-zA-Z_][a-zA-Z0-9_]. See
+    /// https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels.
+    pub fn histogram(
+        self,
+        labels: &[(&str, &str)],
+        buckets: impl Iterator<Item = (f64, f64)>,
+        sum: f64,
+    ) -> io::Result<Self> {
+        for (label, _) in labels.iter() {
+            validate_prometheus_name(label);
+        }
+
+        let mut total: f64 = 0.0;
+        let mut saw_infinity = false;
+        for (bucket, v) in buckets {
+            total += v;
+            if bucket == std::f64::INFINITY {
+                saw_infinity = true;
+                writeln!(
+                    self.encoder.writer,
+                    "{}_bucket{{{}}} {} {}",
+                    self.name,
+                    MetricsEncoder::<W>::encode_labels(labels.iter().chain(once(&("le", "+Inf")))),
+                    total,
+                    self.encoder.now_millis
+                )?;
+            } else {
+                let bucket_str = bucket.to_string();
+                writeln!(
+                    self.encoder.writer,
+                    "{}_bucket{{{}}} {} {}",
+                    self.name,
+                    MetricsEncoder::<W>::encode_labels(
+                        labels.iter().chain(once(&("le", bucket_str.as_str())))
+                    ),
+                    total,
+                    self.encoder.now_millis
+                )?;
+            }
+        }
+        if !saw_infinity {
+            writeln!(
+                self.encoder.writer,
+                "{}_bucket{{{}}} {} {}",
+                self.name,
+                MetricsEncoder::<W>::encode_labels(labels.iter().chain(once(&("le", "+Inf")))),
+                total,
+                self.encoder.now_millis
+            )?;
+        }
+
+        if labels.is_empty() {
+            writeln!(
+                self.encoder.writer,
+                "{}_sum {} {}",
+                self.name, sum, self.encoder.now_millis
+            )?;
+            writeln!(
+                self.encoder.writer,
+                "{}_count {} {}",
+                self.name, total, self.encoder.now_millis
+            )?;
+        } else {
+            writeln!(
+                self.encoder.writer,
+                "{}_sum{{{}}} {} {}",
+                self.name,
+                MetricsEncoder::<W>::encode_labels(labels.iter()),
+                sum,
+                self.encoder.now_millis
+            )?;
+            writeln!(
+                self.encoder.writer,
+                "{}_count{{{}}} {} {}",
+                self.name,
+                MetricsEncoder::<W>::encode_labels(labels.iter()),
+                total,
+                self.encoder.now_millis
+            )?;
+        }
+
+        Ok(self)
+    }
+}
 /// `MetricsEncoder` provides methods to encode metrics in a text format
 /// that can be understood by Prometheus.
 ///
@@ -77,36 +179,22 @@ impl<W: io::Write> MetricsEncoder<W> {
         sum: f64,
         help: &str,
     ) -> io::Result<()> {
+        self.histogram_vec(name, help)?
+            .histogram(&[], buckets, sum)?;
+        Ok(())
+    }
+
+    pub fn histogram_vec<'a>(
+        &'a mut self,
+        name: &'a str,
+        help: &'a str,
+    ) -> io::Result<LabeledHistogramBuilder<'a, W>> {
         validate_prometheus_name(name);
         self.encode_header(name, help, "histogram")?;
-        let mut total: f64 = 0.0;
-        let mut saw_infinity = false;
-        for (bucket, v) in buckets {
-            total += v;
-            if bucket == std::f64::INFINITY {
-                saw_infinity = true;
-                writeln!(
-                    self.writer,
-                    "{}_bucket{{le=\"+Inf\"}} {} {}",
-                    name, total, self.now_millis
-                )?;
-            } else {
-                writeln!(
-                    self.writer,
-                    "{}_bucket{{le=\"{}\"}} {} {}",
-                    name, bucket, total, self.now_millis
-                )?;
-            }
-        }
-        if !saw_infinity {
-            writeln!(
-                self.writer,
-                "{}_bucket{{le=\"+Inf\"}} {} {}",
-                name, total, self.now_millis
-            )?;
-        }
-        writeln!(self.writer, "{}_sum {} {}", name, sum, self.now_millis)?;
-        writeln!(self.writer, "{}_count {} {}", name, total, self.now_millis)
+        Ok(LabeledHistogramBuilder {
+            encoder: self,
+            name,
+        })
     }
 
     pub fn encode_single_value(
@@ -177,9 +265,9 @@ impl<W: io::Write> MetricsEncoder<W> {
         })
     }
 
-    fn encode_labels(labels: &[(&str, &str)]) -> String {
+    fn encode_labels<'a>(labels: impl Iterator<Item = &'a (&'a str, &'a str)>) -> String {
         let mut buf = String::new();
-        for (i, (k, v)) in labels.iter().enumerate() {
+        for (i, (k, v)) in labels.enumerate() {
             validate_prometheus_name(k);
             if i > 0 {
                 buf.push(',')
@@ -219,7 +307,7 @@ impl<W: io::Write> MetricsEncoder<W> {
             self.writer,
             "{}{{{}}} {} {}",
             name,
-            Self::encode_labels(label_values),
+            Self::encode_labels(label_values.iter()),
             value,
             self.now_millis
         )
