@@ -1,8 +1,31 @@
+use std::fmt;
 use std::io;
 use std::iter::once;
 
 #[cfg(test)]
 mod tests;
+
+struct FormattedValue(f64);
+
+impl fmt::Display for FormattedValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // If the value is not numeric, we need to represent it using Go library conventions.
+        //
+        // > `value` is a float represented as required by Go's ParseFloat() function.
+        // > In addition to standard numerical values, NaN, +Inf, and -Inf are
+        // > valid values representing not a number, positive infinity, and negative infinity, respectively.
+        let value = self.0;
+        if value.is_nan() {
+            write!(f, "NaN")
+        } else if value == f64::INFINITY {
+            write!(f, "+Inf")
+        } else if value == f64::NEG_INFINITY {
+            write!(f, "-Inf")
+        } else {
+            write!(f, "{}", value)
+        }
+    }
+}
 
 /// A helper for encoding metrics that use
 /// [labels](https://prometheus.io/docs/practices/naming/#labels).
@@ -102,12 +125,16 @@ impl<W: io::Write> LabeledHistogramBuilder<'_, W> {
             writeln!(
                 self.encoder.writer,
                 "{}_sum {} {}",
-                self.name, sum, self.encoder.now_millis
+                self.name,
+                FormattedValue(sum),
+                self.encoder.now_millis
             )?;
             writeln!(
                 self.encoder.writer,
                 "{}_count {} {}",
-                self.name, total, self.encoder.now_millis
+                self.name,
+                FormattedValue(total),
+                self.encoder.now_millis
             )?;
         } else {
             writeln!(
@@ -115,7 +142,7 @@ impl<W: io::Write> LabeledHistogramBuilder<'_, W> {
                 "{}_sum{{{}}} {} {}",
                 self.name,
                 MetricsEncoder::<W>::encode_labels(labels.iter()),
-                sum,
+                FormattedValue(sum),
                 self.encoder.now_millis
             )?;
             writeln!(
@@ -123,7 +150,7 @@ impl<W: io::Write> LabeledHistogramBuilder<'_, W> {
                 "{}_count{{{}}} {} {}",
                 self.name,
                 MetricsEncoder::<W>::encode_labels(labels.iter()),
-                total,
+                FormattedValue(total),
                 self.encoder.now_millis
             )?;
         }
@@ -206,7 +233,13 @@ impl<W: io::Write> MetricsEncoder<W> {
     ) -> io::Result<()> {
         validate_prometheus_name(name);
         self.encode_header(name, help, typ)?;
-        writeln!(self.writer, "{} {} {}", name, value, self.now_millis)
+        writeln!(
+            self.writer,
+            "{} {} {}",
+            name,
+            FormattedValue(value),
+            self.now_millis
+        )
     }
 
     /// Encodes the metadata and the value of a counter.
@@ -308,7 +341,7 @@ impl<W: io::Write> MetricsEncoder<W> {
             "{}{{{}}} {} {}",
             name,
             Self::encode_labels(label_values.iter()),
-            value,
+            FormattedValue(value),
             self.now_millis
         )
     }
