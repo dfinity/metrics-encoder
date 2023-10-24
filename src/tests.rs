@@ -182,6 +182,46 @@ http_request_duration_seconds_count{backend="stable"} 144320 1395066363000
 }
 
 #[test]
+fn test_special_values() {
+    let mut encoder = MetricsEncoder::new(vec![0u8; 0], 1395066363000);
+    encoder
+        .encode_gauge(
+            "ledger_token_pool",
+            f64::INFINITY,
+            "The cap on the total number of tokens to be minted.",
+        )
+        .unwrap();
+    encoder
+        .encode_gauge(
+            "negative_inf",
+            f64::NEG_INFINITY,
+            "The negative infinity example.",
+        )
+        .unwrap();
+    encoder
+        .encode_gauge(
+            "token_price_usd",
+            f64::NAN,
+            "The current token price in USD.",
+        )
+        .unwrap();
+
+    assert_eq!(
+        r#"# HELP ledger_token_pool The cap on the total number of tokens to be minted.
+# TYPE ledger_token_pool gauge
+ledger_token_pool +Inf 1395066363000
+# HELP negative_inf The negative infinity example.
+# TYPE negative_inf gauge
+negative_inf -Inf 1395066363000
+# HELP token_price_usd The current token price in USD.
+# TYPE token_price_usd gauge
+token_price_usd NaN 1395066363000
+"#,
+        as_string(encoder)
+    );
+}
+
+#[test]
 #[should_panic(expected = "Empty names are not allowed")]
 fn validate_empty_name() {
     validate_prometheus_name("")
