@@ -93,7 +93,7 @@ impl<W: io::Write> LabeledHistogramBuilder<'_, W> {
                     "{}_bucket{{{}}} {} {}",
                     self.name,
                     MetricsEncoder::<W>::encode_labels(labels.iter().chain(once(&("le", "+Inf")))),
-                    total,
+                    FormattedValue(total),
                     self.encoder.now_millis
                 )?;
             } else {
@@ -105,7 +105,7 @@ impl<W: io::Write> LabeledHistogramBuilder<'_, W> {
                     MetricsEncoder::<W>::encode_labels(
                         labels.iter().chain(once(&("le", bucket_str.as_str())))
                     ),
-                    total,
+                    FormattedValue(total),
                     self.encoder.now_millis
                 )?;
             }
