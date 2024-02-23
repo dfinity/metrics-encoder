@@ -120,6 +120,42 @@ http_request_duration_seconds_count 144320 1395066363000
 }
 
 #[test]
+fn test_histogram_infinity_value() {
+    let mut encoder = MetricsEncoder::new(vec![0u8; 0], 1395066363000);
+    encoder
+        .encode_histogram(
+            "http_request_duration_seconds",
+            [
+                (0.05, 24054f64),
+                (0.1, 33444.0 - 24054.0),
+                (0.2, 100392.0 - 33444.0),
+                (0.5, 129389.0 - 100392.0),
+                (1.0, f64::INFINITY),
+                (std::f64::INFINITY, f64::INFINITY),
+            ]
+            .into_iter(),
+            53423.0,
+            "A histogram of the request duration.",
+        )
+        .unwrap();
+
+    assert_eq!(
+        r#"# HELP http_request_duration_seconds A histogram of the request duration.
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{le="0.05"} 24054 1395066363000
+http_request_duration_seconds_bucket{le="0.1"} 33444 1395066363000
+http_request_duration_seconds_bucket{le="0.2"} 100392 1395066363000
+http_request_duration_seconds_bucket{le="0.5"} 129389 1395066363000
+http_request_duration_seconds_bucket{le="1"} +Inf 1395066363000
+http_request_duration_seconds_bucket{le="+Inf"} +Inf 1395066363000
+http_request_duration_seconds_sum 53423 1395066363000
+http_request_duration_seconds_count +Inf 1395066363000
+"#,
+        as_string(encoder)
+    );
+}
+
+#[test]
 fn test_histogram_vec() {
     let mut encoder = MetricsEncoder::new(vec![0u8; 0], 1395066363000);
     encoder
