@@ -108,3 +108,4 @@ If you want to submit a pull request to fix an issue or add a feature, here's a 
 1. Make changes to the pull request, if requested.
 
 1. Celebrate your success after your pull request is merged!
+
