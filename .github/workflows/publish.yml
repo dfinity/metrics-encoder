@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     permissions:
+      contents: read
       # Required for OIDC token exchange
       id-token: write
 
@@ -23,7 +24,7 @@ jobs:
       - name: Verify version matches tag
         run: |
           CARGO_VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
           echo "Cargo.toml version: $CARGO_VERSION"
           echo "Git tag version: $TAG_VERSION"
           if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
